@@ -35,7 +35,13 @@ const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 // ─────────────────────────────────────────────
 function loadKB(): string {
   const kbDir = path.join(process.cwd(), "lib", "kb");
-  const files = ["cfp-lifecycle.md", "loan-strategy.md", "mutual-aid.md"];
+  // 순서 중요: 일반 개념 → 신협 실제 상품 (더 구체적)
+  const files = [
+    "cfp-lifecycle.md",
+    "loan-strategy.md",
+    "mutual-aid.md",
+    "shinhyup-products.md", // ⭐ 본점 자료로 사용자가 직접 채움
+  ];
   const parts: string[] = [];
   for (const f of files) {
     try {
