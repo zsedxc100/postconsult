@@ -8,7 +8,22 @@
 import { calcEqualPaymentSchedule } from "./calc/repayment";
 import { calcEarlyRepaymentImpact } from "./calc/early-repayment";
 import { calcRateCutImpact } from "./calc/rate-cut";
+import { getDefaultLifeEvent } from "./lifecycle-map";
 import type { AnonymousProfile, CalculationContext } from "./types";
+
+/**
+ * 익명 프로필의 lifeEvent 를 나이에 맞춰 자동 보정.
+ * 사용자가 수동으로 지정한 값이 있으면 그대로 유지.
+ */
+export function normalizeProfile(profile: AnonymousProfile): AnonymousProfile {
+  if (!profile.lifeEvent && profile.ageGroup) {
+    const autoEvent = getDefaultLifeEvent(profile.ageGroup);
+    if (autoEvent) {
+      return { ...profile, lifeEvent: autoEvent };
+    }
+  }
+  return profile;
+}
 
 export function buildCalcContext(
   profile: AnonymousProfile

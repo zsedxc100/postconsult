@@ -11,6 +11,8 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import fs from "node:fs";
+import path from "node:path";
 import { assertAnonymousProfile, PIIGuardError } from "./pii-guard";
 import type {
   AnonymousProfile,
@@ -28,7 +30,29 @@ const anthropic = new Anthropic({
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-4-6";
 
 // ─────────────────────────────────────────────
-// System Prompt — Claude의 "성격·역할·규칙"
+// KB 로드 — lib/kb/*.md 파일을 통째로 읽어서 system prompt에 주입
+// 모듈 로드 시 한 번만 읽고 메모리에 캐시
+// ─────────────────────────────────────────────
+function loadKB(): string {
+  const kbDir = path.join(process.cwd(), "lib", "kb");
+  const files = ["cfp-lifecycle.md", "loan-strategy.md", "mutual-aid.md"];
+  const parts: string[] = [];
+  for (const f of files) {
+    try {
+      const content = fs.readFileSync(path.join(kbDir, f), "utf-8");
+      parts.push(`## [KB: ${f}]\n\n${content}`);
+    } catch {
+      // KB 파일 없어도 동작은 하게 (워닝만)
+      console.warn(`[claude] KB file not found: ${f}`);
+    }
+  }
+  return parts.join("\n\n---\n\n");
+}
+
+const KB_CONTENT = loadKB();
+
+// ─────────────────────────────────────────────
+// System Prompt — Claude의 "성격·역할·규칙" + KB
 // 매번 동일하므로 prompt caching 으로 비용 절감
 // ─────────────────────────────────────────────
 const SYSTEM_PROMPT = `당신은 한국 신협(신용협동조합)의 상담 후속 케어 AI입니다.
@@ -105,6 +129,42 @@ const SYSTEM_PROMPT = `당신은 한국 신협(신용협동조합)의 상담 후
 - 법률·세무 단정 금지. 항상 "참고용" 명시
 - 숫자 계산 금지 (이미 받은 calc context 그대로 사용)
 - markdown 코드 펜스 (\\\`\\\`\\\`) 금지 — 순수 JSON만
+
+# 재무설계 지식 베이스 (이 내용을 바탕으로 추천·설명)
+
+다음 문서들은 모든 리포트 생성의 근거입니다. 여기에 없는 내용은 추정하지 말고,
+여기 있는 원칙과 예시를 그대로 활용하세요. 고객의 연령·생애주기·상황에 맞춰
+**구체적인 숫자가 있는 근거**를 제시해야 합니다.
+
+${KB_CONTENT}
+
+---
+
+# 작성 지침 (핵심)
+
+1. **CFP 6단계 프로세스를 리포트 전체에 녹입니다.**
+   - 슬롯 1 Hero: 목표 ("자녀 교육자금", "은퇴 30년 준비" 등 구체적으로)
+   - 슬롯 2 상담 요약: 수집된 정보
+   - 슬롯 3 분석: 계산 결과 해석 + 갭 분석
+   - 슬롯 5 다음 단계: 전략 수립 + 실행 상품 추천
+   - 슬롯 7 클로징: 모니터링 약속 (다음 점검 시점)
+
+2. **모든 추천에 "왜 이 고객에게"** 근거 한 줄.
+   예: "40대 자녀 양육기 · 가장 역할 · 주담대 보유 → 대출금상환공제 우선"
+
+3. **KB에 있는 구체 숫자를 활용.**
+   - 중도상환 효과 (월 5만 → 2.2년 단축 등) 는 KB에 있음
+   - 공제 상품 특징도 KB에 있음
+   - 생애주기 단계별 특징·과제도 KB에 있음
+   - 칼같이 베끼지 말고, 고객 상황에 맞게 자연스럽게 인용
+
+4. **교차 전략 (슬롯 6) 은 KB의 "대출 고객의 수신 전략" 섹션** 을 기반으로.
+   - 비상자금 6개월 원칙, 조합원 우대 예금 등 자연스럽게
+
+5. **과장·단정 금지.**
+   - "반드시" 대신 "권장합니다"
+   - 확정 수익률·세법 단정 금지
+   - 모든 리포트 끝에 "참고용" 고지
 
 지금부터 사용자가 보낼 익명 프로필 + 계산 결과를 받아 위 스키마대로 JSON을 출력하세요.`;
 

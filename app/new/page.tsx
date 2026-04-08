@@ -23,12 +23,11 @@ export default function NewReportPage() {
   const [customerName, setCustomerName] = useState("");
   const [consultantName, setConsultantName] = useState("");
 
-  // 익명 프로필 필드
+  // 익명 프로필 필드 (lifeEvent 는 서버에서 ageGroup 으로부터 자동 매핑)
   const [profile, setProfile] = useState<AnonymousProfile>({
     track: "loan",
     stage: "post_agreement",
     ageGroup: "40대",
-    lifeEvent: "자녀교육",
     familyStatus: "기혼_자녀",
     discType: "S",
     bitType: "preserver",
@@ -66,9 +65,11 @@ export default function NewReportPage() {
 
       // 2. 리포트 + PII 정보를 URL fragment 에 박기
       // fragment(#) 는 서버에 절대 전송되지 않음
+      // profile 도 같이 넣음 (그래프 그리려면 원금·금리·기간 필요)
       const payload = {
         report: data.report,
         calc: data.calc,
+        profile,
         customerName,
         consultantName,
       };
@@ -144,27 +145,18 @@ export default function NewReportPage() {
             </select>
           </Field>
 
-          <Field label="연령대">
+          <Field label="연령대 (생애주기는 자동 매핑)">
             <select
               value={profile.ageGroup}
               onChange={(e) => setProfile({ ...profile, ageGroup: e.target.value })}
               style={inputStyle}
             >
-              {["20대", "30대", "40대", "50대", "60대", "70대+"].map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
-            </select>
-          </Field>
-
-          <Field label="생애 이벤트">
-            <select
-              value={profile.lifeEvent}
-              onChange={(e) => setProfile({ ...profile, lifeEvent: e.target.value })}
-              style={inputStyle}
-            >
-              {["청약", "결혼", "출산", "자녀교육", "주택구입", "은퇴준비", "은퇴후"].map((a) => (
-                <option key={a} value={a}>{a}</option>
-              ))}
+              <option value="20대">20대 — 사회초년생 (청약·종잣돈)</option>
+              <option value="30대">30대 — 가정 형성기 (결혼·출산·주택)</option>
+              <option value="40대">40대 — 자녀 양육기 (교육·주담대·보장)</option>
+              <option value="50대">50대 — 자녀 독립기 (노후 가속)</option>
+              <option value="60대">60대 — 은퇴 준비기 (현금흐름)</option>
+              <option value="70대+">70대+ — 은퇴 생활기 (자산 보존)</option>
             </select>
           </Field>
 

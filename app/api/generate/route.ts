@@ -10,7 +10,7 @@
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { buildCalcContext } from "@/lib/build-calc-context";
+import { buildCalcContext, normalizeProfile } from "@/lib/build-calc-context";
 import { generateReport } from "@/lib/claude";
 import { PIIGuardError } from "@/lib/pii-guard";
 
@@ -58,9 +58,10 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { profile } = parsed.data;
+    // 2. 나이 → 생애주기 자동 매핑 (수동 선택 없어도 동작)
+    const profile = normalizeProfile(parsed.data.profile);
 
-    // 2. 계산 엔진 실행 (PII 0)
+    // 3. 계산 엔진 실행 (PII 0)
     const calc = buildCalcContext(profile);
 
     // 3. Claude 호출
