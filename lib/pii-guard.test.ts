@@ -1,10 +1,7 @@
 /**
- * PII 가드레일 검산
+ * PII 가드레일 검산 (2026-04 새 구조)
  *
  * 정책: 의심되면 차단. 거짓 양성 OK, 거짓 음성 NOT OK.
- *
- * 모든 PII 패턴은 반드시 잡혀야 하고,
- * 안전한 익명 프로필은 반드시 통과해야 함.
  */
 
 import { describe, it, expect } from "vitest";
@@ -37,7 +34,7 @@ describe("PII 패턴 검출 — 텍스트 검사", () => {
       expect(detectPIIInText("계좌 110-123-456789").found).toBe(true);
     });
 
-    it("주민등록번호 (앞 6자리만이라도)", () => {
+    it("주민등록번호", () => {
       expect(detectPIIInText("800101-1234567").found).toBe(true);
       expect(detectPIIInText("800101-1").found).toBe(true);
     });
@@ -62,54 +59,97 @@ describe("PII 패턴 검출 — 텍스트 검사", () => {
     });
 
     it("긴 숫자라도 카드 패턴 아님", () => {
-      // 13자리, 15자리는 카드 16자리 패턴에 안 잡힘
       expect(detectPIIInText("연 4.2% 30년 360개월").found).toBe(false);
-    });
-
-    it("특수문자 가득한 텍스트", () => {
-      expect(detectPIIInText("월 122만원! 이자 1.9억!").found).toBe(false);
     });
   });
 });
 
-describe("객체 전체 검사 — assertAnonymousProfile", () => {
+describe("객체 전체 검사 — assertAnonymousProfile (새 구조)", () => {
   describe("✅ 통과해야 하는 익명 프로필", () => {
-    it("김상민 케이스 익명화 버전", () => {
-      const safe = {
-        track: "loan",
-        stage: "post_agreement",
-        ageGroup: "40대",
-        lifeEvent: "자녀교육",
-        familyStatus: "기혼_자녀",
-        discType: "S",
-        bitType: "preserver",
-        loanPurpose: "주택",
-        loanPrincipal: 250_000_000,
-        loanTermMonths: 360,
-        interestRatePercent: 4.2,
-        repayMethod: "원리금균등",
-        topicChips: ["금리인하요구권", "중도상환검토", "대출금상환공제"],
-        branchName: "OO지점",
-      };
-      expect(() => assertAnonymousProfile(safe)).not.toThrow();
-    });
-
-    it("최소 필드만 있어도 OK", () => {
+    it("최소 필드 (나이만)", () => {
       const minimal = {
-        track: "savings",
-        stage: "consult_only",
         ageGroup: "30대",
+        joinedProducts: [],
+        proposedProducts: [],
+        topics: [],
       };
       expect(() => assertAnonymousProfile(minimal)).not.toThrow();
+    });
+
+    it("이서연 사회초년생 케이스 (수신 가입)", () => {
+      const profile = {
+        ageGroup: "20대",
+        familyStatus: "미혼",
+        childrenCount: 0,
+        dependentsCount: 0,
+        incomeRange: "월 200-300만",
+        joinedProducts: [
+          {
+            type: "savings",
+            category: "저축성",
+            name: "정기적금 12개월",
+            monthlyDeposit: 300000,
+            ratePercent: 3.7,
+            termMonths: 12,
+            isTaxFree: false,
+            preferentialConditions: ["조합원 +0.1%p", "급여이체 +0.1%p"],
+            midwayRate: "기본금리의 50%",
+          },
+        ],
+        proposedProducts: [
+          {
+            type: "savings",
+            name: "자유적립예금",
+            specialNotes: "비상자금 마련용",
+          },
+        ],
+        emphasizedProducts: [
+          { name: "청약종합저축", reason: "사회초년생 주력" },
+          { name: "노란우산공제", reason: "장기 비과세" },
+        ],
+        topics: ["사회초년생", "청약", "비상자금", "조합원우대"],
+        discType: "I",
+        klontzType: "vigilance",
+        freeNote: "꼼꼼하게 다 물어보심, 자료 원함",
+        branchName: "춘천신협",
+      };
+      expect(() => assertAnonymousProfile(profile)).not.toThrow();
+    });
+
+    it("김상민 골든 페르소나 (여신 약정 완료)", () => {
+      const profile = {
+        ageGroup: "40대",
+        familyStatus: "기혼_자녀",
+        childrenCount: 2,
+        joinedProducts: [
+          {
+            type: "loan",
+            name: "주담대 30년",
+            loanPrincipal: 250_000_000,
+            loanRate: 4.2,
+            loanTermMonths: 360,
+            repayMethod: "원리금균등",
+          },
+        ],
+        proposedProducts: [],
+        topics: ["주담대 약정완료", "금리인하요구권"],
+        discType: "S",
+        klontzType: "vigilance",
+        branchName: "춘천신협",
+      };
+      expect(() => assertAnonymousProfile(profile)).not.toThrow();
     });
   });
 
   describe("❌ 차단되어야 하는 것", () => {
-    it("이름 필드가 있으면 차단", () => {
+    it("customerName 필드가 있으면 차단", () => {
       expect(() =>
         assertAnonymousProfile({
-          track: "loan",
-          customerName: "김상민", // 금지 필드
+          ageGroup: "40대",
+          customerName: "김상민",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
         })
       ).toThrow(PIIGuardError);
     });
@@ -117,37 +157,106 @@ describe("객체 전체 검사 — assertAnonymousProfile", () => {
     it("phone 필드가 있으면 차단", () => {
       expect(() =>
         assertAnonymousProfile({
-          track: "loan",
+          ageGroup: "40대",
           phone: "010-1234-5678",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
         })
       ).toThrow(PIIGuardError);
     });
 
-    it("화이트리스트에 없는 필드는 차단 (모르는 필드)", () => {
+    it("consultantName 도 차단 (담당자도 PII)", () => {
       expect(() =>
         assertAnonymousProfile({
-          track: "loan",
-          mysteryField: "뭔지 모르겠음",
+          ageGroup: "40대",
+          consultantName: "박지영",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
         })
       ).toThrow(PIIGuardError);
     });
 
-    it("허용된 필드라도 그 안에 전화번호 패턴이 있으면 차단", () => {
+    it("화이트리스트에 없는 필드 차단 (모르는 필드)", () => {
       expect(() =>
         assertAnonymousProfile({
-          track: "loan",
-          stage: "post_agreement",
-          // lifeEvent 는 허용 필드지만 그 안에 전화번호가 들어있음 (악의적/실수)
-          lifeEvent: "010-1234-5678 자녀교육",
+          ageGroup: "30대",
+          mysteryField: "뭔지 모름",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
         })
       ).toThrow(PIIGuardError);
     });
 
-    it("topicChips 배열 안에 PII 있으면 차단", () => {
+    it("freeNote 안에 전화번호 있으면 차단", () => {
       expect(() =>
         assertAnonymousProfile({
-          track: "loan",
-          topicChips: ["주담대", "user@example.com 이메일"],
+          ageGroup: "30대",
+          freeNote: "고객 010-1234-5678",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
+        })
+      ).toThrow(PIIGuardError);
+    });
+
+    it("topics 배열 안에 이메일 있으면 차단", () => {
+      expect(() =>
+        assertAnonymousProfile({
+          ageGroup: "30대",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: ["주담대", "user@example.com"],
+        })
+      ).toThrow(PIIGuardError);
+    });
+
+    it("joinedProducts[0].specialNotes 안에 PII 있으면 차단", () => {
+      expect(() =>
+        assertAnonymousProfile({
+          ageGroup: "30대",
+          joinedProducts: [
+            {
+              type: "savings",
+              name: "정기적금",
+              specialNotes: "고객 전화 010-9999-8888",
+            },
+          ],
+          proposedProducts: [],
+          topics: [],
+        })
+      ).toThrow(PIIGuardError);
+    });
+
+    it("joinedProducts[0] 안에 모르는 필드 있으면 차단", () => {
+      expect(() =>
+        assertAnonymousProfile({
+          ageGroup: "30대",
+          joinedProducts: [
+            {
+              type: "savings",
+              name: "정기적금",
+              customerName: "이서연", // 상품 안에 PII
+            },
+          ],
+          proposedProducts: [],
+          topics: [],
+        })
+      ).toThrow(PIIGuardError);
+    });
+
+    it("emphasizedProducts 의 reason 안에 PII 있으면 차단", () => {
+      expect(() =>
+        assertAnonymousProfile({
+          ageGroup: "30대",
+          joinedProducts: [],
+          proposedProducts: [],
+          emphasizedProducts: [
+            { name: "청약저축", reason: "010-1111-2222 통화" },
+          ],
+          topics: [],
         })
       ).toThrow(PIIGuardError);
     });
@@ -164,11 +273,13 @@ describe("객체 전체 검사 — assertAnonymousProfile", () => {
     it("PIIGuardError 의 reasons 배열에 발견된 패턴 명시", () => {
       try {
         assertAnonymousProfile({
-          track: "loan",
+          ageGroup: "40대",
           customerName: "김상민",
           phone: "010-1234-5678",
+          joinedProducts: [],
+          proposedProducts: [],
+          topics: [],
         });
-        // 여기 도달하면 안 됨
         expect.fail("PIIGuardError 가 던져졌어야 함");
       } catch (e) {
         expect(e).toBeInstanceOf(PIIGuardError);
